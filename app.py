@@ -121,44 +121,38 @@ st.markdown("""
 
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 
-.main-title {
-    font-family: 'Fraunces', serif;
-    font-size: 3.5rem; font-weight: 900;
-    color: #f7c948; text-align: center;
-    line-height: 1; margin-bottom: 0.2rem;
-}
-.main-sub {
-    text-align: center; color: #7b82a8;
-    font-size: 0.9rem; letter-spacing: 0.15em;
-    text-transform: uppercase; margin-bottom: 2rem;
-}
-.card {
-    background: #1a1d27; border: 1px solid #2e3250;
-    border-radius: 16px; padding: 1.4rem 1.6rem;
-    margin-bottom: 1rem;
-}
+/* ── Force light-readable text everywhere ── */
+p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
+.stMarkdown p, .stMarkdown li { color: #1a1a2e !important; }
+.stTextArea label { color: #1a1a2e !important; }
+.stSelectbox label { color: #1a1a2e !important; }
+
+/* ── Override dark custom classes to work on light bg ── */
+.main-title { color: #1b3a6b !important; }
+.main-sub   { color: #4a5568 !important; }
 .prompt-box {
-    background: #1a1d27; border: 1px solid #2e3250;
+    background: #f8fafc; border: 1px solid #cbd5e0;
     border-radius: 16px; padding: 1.5rem;
-    font-size: 1.05rem; line-height: 1.8;
+    font-size: 1.05rem; line-height: 1.8; color: #1a1a2e !important;
 }
+.prompt-box p, .prompt-box li, .prompt-box ol, .prompt-box br { color: #1a1a2e !important; }
 .badge {
     display: inline-block; padding: 0.2rem 0.8rem;
     border-radius: 100px; font-size: 0.75rem; font-weight: 700;
     margin-bottom: 0.5rem;
 }
-.badge-green  { background: rgba(110,231,183,0.15); color: #6ee7b7; border: 1px solid rgba(110,231,183,0.3); }
-.badge-yellow { background: rgba(247,201,72,0.15);  color: #f7c948; border: 1px solid rgba(247,201,72,0.3); }
-.badge-red    { background: rgba(255,107,107,0.15); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.3); }
-.badge-purple { background: rgba(167,139,250,0.15); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3); }
-.badge-teal   { background: rgba(78,205,196,0.15);  color: #4ecdc4; border: 1px solid rgba(78,205,196,0.3); }
+.badge-green  { background: rgba(16,185,129,0.12); color: #047857 !important; border: 1px solid rgba(16,185,129,0.3); }
+.badge-yellow { background: rgba(217,119,6,0.12);  color: #92400e !important; border: 1px solid rgba(217,119,6,0.3); }
+.badge-red    { background: rgba(220,38,38,0.1);   color: #991b1b !important; border: 1px solid rgba(220,38,38,0.3); }
+.badge-purple { background: rgba(109,40,217,0.1);  color: #5b21b6 !important; border: 1px solid rgba(109,40,217,0.3); }
+.badge-teal   { background: rgba(13,148,136,0.1);  color: #0f766e !important; border: 1px solid rgba(13,148,136,0.3); }
 
 .tips-item {
-    background: rgba(255,107,107,0.07);
-    border: 1px solid rgba(255,107,107,0.2);
+    background: rgba(220,38,38,0.06);
+    border: 1px solid rgba(220,38,38,0.2);
     border-radius: 10px; padding: 0.6rem 0.9rem;
     margin-bottom: 0.4rem; font-size: 0.9rem;
-    color: #e8eaf6;
+    color: #7f1d1d !important;
 }
 .timer-big {
     font-family: 'Fraunces', serif;
@@ -166,16 +160,16 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     text-align: center; padding: 0.5rem;
     border-radius: 12px; margin-bottom: 0.5rem;
 }
-.timer-green  { color: #6ee7b7; background: rgba(110,231,183,0.08); border: 1px solid rgba(110,231,183,0.2); }
-.timer-yellow { color: #f7c948; background: rgba(247,201,72,0.08);  border: 1px solid rgba(247,201,72,0.2); }
-.timer-red    { color: #ff6b6b; background: rgba(255,107,107,0.1);  border: 1px solid rgba(255,107,107,0.3); }
+.timer-green  { color: #047857 !important; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); }
+.timer-yellow { color: #92400e !important; background: rgba(217,119,6,0.08);  border: 1px solid rgba(217,119,6,0.2); }
+.timer-red    { color: #991b1b !important; background: rgba(220,38,38,0.08);  border: 1px solid rgba(220,38,38,0.3); }
 
-.word-count { font-size: 0.85rem; color: #7b82a8; margin-top: 0.3rem; }
-.word-good  { color: #6ee7b7; }
-.word-over  { color: #ff6b6b; }
+.word-count { font-size: 0.85rem; color: #4a5568 !important; margin-top: 0.3rem; }
+.word-good  { color: #047857 !important; font-weight: 600; }
+.word-over  { color: #991b1b !important; font-weight: 600; }
 
 .flashcard-front {
-    background: #22263a; border: 1px solid #2e3250;
+    background: #f0f4ff; border: 2px solid #c7d2fe;
     border-radius: 20px; padding: 2.5rem;
     text-align: center; min-height: 160px;
     display: flex; flex-direction: column;
@@ -183,32 +177,52 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 }
 .flashcard-word {
     font-family: 'Fraunces', serif;
-    font-size: 2.5rem; font-weight: 700; color: #f7c948;
+    font-size: 2.5rem; font-weight: 700; color: #1b3a6b !important;
 }
 .flashcard-back {
-    background: rgba(247,201,72,0.08); border: 1px solid rgba(247,201,72,0.3);
+    background: #fefce8; border: 2px solid #fde68a;
     border-radius: 20px; padding: 2.5rem; text-align: center;
 }
-.option-correct { background: rgba(110,231,183,0.15) !important; border-color: #6ee7b7 !important; color: #6ee7b7 !important; }
-.option-wrong   { background: rgba(255,107,107,0.15) !important; border-color: #ff6b6b !important; color: #ff6b6b !important; }
+.flashcard-back * { color: #1a1a2e !important; }
+
+/* ── Textarea ── */
+.stTextArea textarea {
+    background: #ffffff !important;
+    border: 2px solid #c7d2fe !important;
+    color: #1a1a2e !important;
+    border-radius: 12px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 1rem !important;
+    line-height: 1.7 !important;
+    pointer-events: auto !important;
+    cursor: text !important;
+}
+.stTextArea textarea:focus {
+    border-color: #4f46e5 !important;
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.15) !important;
+}
+.stTextArea textarea:disabled {
+    background: #f1f5f9 !important;
+    color: #94a3b8 !important;
+    cursor: not-allowed !important;
+}
+
+/* ── ñ button ── */
+.nbutton {
+    display: inline-block;
+    background: #4f46e5; color: white !important;
+    border: none; border-radius: 8px;
+    padding: 0.3rem 0.8rem; font-size: 1rem;
+    font-weight: 700; cursor: pointer;
+    margin-bottom: 0.4rem;
+    font-family: 'DM Sans', sans-serif;
+}
+.nbutton:hover { background: #3730a3; }
 
 .stButton > button {
     border-radius: 10px !important;
     font-family: 'DM Sans', sans-serif !important;
     font-weight: 600 !important;
-    transition: all 0.2s !important;
-}
-.stTextArea textarea {
-    background: #1a1d27 !important;
-    border: 1px solid #2e3250 !important;
-    color: #e8eaf6 !important;
-    border-radius: 12px !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-size: 1rem !important;
-    line-height: 1.7 !important;
-}
-.stTextArea textarea:focus {
-    border-color: #6ee7b7 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -991,13 +1005,28 @@ elif st.session_state.screen == "writing":
             if is_locked and not already_done:
                 st.warning("⏰ Time's up! Your response is locked. Click **Submit** to send it to your teacher.")
 
+            # ── ñ and special characters helper ──
+            if not is_locked:
+                st.markdown("**Special characters / Caracteres especiales:**")
+                special_chars = ["ñ", "Ñ", "á", "é", "í", "ó", "ú", "ü", "¿", "¡"]
+                char_cols = st.columns(len(special_chars))
+                for i, char in enumerate(special_chars):
+                    with char_cols[i]:
+                        if st.button(char, key=f"char_{key_resp}_{i}", use_container_width=True):
+                            current = st.session_state.get(f"textarea_{key_resp}", saved.get("text",""))
+                            st.session_state[f"textarea_{key_resp}"] = current + char
+                            st.rerun()
+
+            # ── Text area ──
+            init_val = st.session_state.get(f"textarea_{key_resp}", saved.get("text",""))
             response_text = st.text_area(
-                f"Write here (target: {target})",
-                value=saved.get("text",""),
+                f"✍️ Write your response here (target: {target})",
+                value=init_val,
                 height=320,
                 disabled=is_locked,
                 key=f"textarea_{key_resp}",
-                placeholder="Escribe tu respuesta aquí... / Write your response here..."
+                placeholder="Escribe tu respuesta aquí... / Write your response here...",
+                help="Click inside this box and start typing. Use the buttons above to insert ñ and accents."
             )
 
             # Word count
