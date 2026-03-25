@@ -10,7 +10,6 @@ CLIENT_EMAIL = "spanish-app-service@spanish-app-490602.iam.gserviceaccount.com"
 FOLDER_NAME  = "Español App"
 
 def get_drive_service():
-    """Return authorized Google Drive + Docs clients, or None if not configured."""
     try:
         from google.oauth2.service_account import Credentials
         from googleapiclient.discovery import build
@@ -29,64 +28,53 @@ def get_drive_service():
         return None, None
 
 def get_or_create_folder(drive, name):
-    """Get or create a folder in Drive, return its ID."""
     try:
         q = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
         res = drive.files().list(q=q, fields="files(id,name)").execute()
         files = res.get("files", [])
         if files:
             return files[0]["id"]
-        meta = {
-            "name": name,
-            "mimeType": "application/vnd.google-apps.folder"
-        }
+        meta = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
         folder = drive.files().create(body=meta, fields="id").execute()
         return folder["id"]
     except Exception:
         return None
 
-def create_student_doc(drive, docs, folder_id, student_name, task_id, level, title, prompt_text, rubric, target):
-    """Create a new Google Doc for the student and return its URL."""
+def create_student_doc(drive, docs, folder_id, student_name, task_id, level, title, prompt_text, rubric, target, response_text, ai_feedback):
     try:
         doc_title = f"{student_name} — {task_id} {title}"
-        # Create the doc
         doc = docs.documents().create(body={"title": doc_title}).execute()
         doc_id  = doc["documentId"]
         doc_url = f"https://docs.google.com/document/d/{doc_id}/edit"
 
-        # Move to folder
         drive.files().update(
             fileId=doc_id,
             addParents=folder_id,
             fields="id, parents"
         ).execute()
 
-        # Share with teacher's Google account (read access via Drive)
-        # Add structured content to doc
         now_str = datetime.now().strftime("%B %d, %Y — %I:%M %p")
-        content = [
-            {"insertText": {"location": {"index": 1}, "text":
-                f"Student: {student_name}\n"
-                f"Task: {task_id} · {level} · {title}\n"
-                f"Date: {now_str}\n"
-                f"Target: {target}\n"
-                f"{'─'*60}\n\n"
-                f"PROMPT:\n{prompt_text}\n\n"
-                f"{'─'*60}\n\n"
-                f"AAPPL CHECKLIST:\n{rubric}\n\n"
-                f"{'─'*60}\n\n"
-                f"⚠️  Common mistakes to avoid:\n"
-                f"  • Starting every sentence with 'I' — vary your sentence structure.\n"
-                f"  • Repeating the same vocabulary — use synonyms when possible.\n"
-                f"  • Forgetting to answer ALL parts of the prompt.\n"
-                f"  • Writing lists instead of sentences.\n\n"
-                f"{'─'*60}\n\n"
-                f"YOUR RESPONSE (write below this line):\n\n"
-            }}
-        ]
+
+        feedback_section = ai_feedback if ai_feedback else "⚠️ AI feedback not available (API key not configured)."
+
+        full_text = (
+            f"Student: {student_name}\n"
+            f"Task: {task_id} · {level} · {title}\n"
+            f"Date: {now_str}\n"
+            f"Target: {target}\n"
+            f"{'─'*60}\n\n"
+            f"PROMPT:\n{prompt_text}\n\n"
+            f"{'─'*60}\n\n"
+            f"AAPPL CHECKLIST:\n{rubric}\n\n"
+            f"{'─'*60}\n\n"
+            f"STUDENT RESPONSE:\n\n{response_text}\n\n"
+            f"{'─'*60}\n\n"
+            f"AI FEEDBACK (Claude):\n\n{feedback_section}\n"
+        )
+
         docs.documents().batchUpdate(
             documentId=doc_id,
-            body={"requests": content}
+            body={"requests": [{"insertText": {"location": {"index": 1}, "text": full_text}}]}
         ).execute()
 
         return doc_url, doc_id
@@ -94,7 +82,6 @@ def create_student_doc(drive, docs, folder_id, student_name, task_id, level, tit
         return None, None
 
 def list_student_docs(drive, folder_id):
-    """List all docs in the Español App folder."""
     try:
         q = f"'{folder_id}' in parents and trashed=false"
         res = drive.files().list(
@@ -105,6 +92,48 @@ def list_student_docs(drive, folder_id):
         return res.get("files", [])
     except Exception:
         return []
+
+# ── AI Feedback ───────────────────────────────────────────
+def get_ai_feedback(student_name, task_id, level, title, prompt_text, rubric, target, response_text):
+    """Call Claude API to get writing feedback. Returns feedback string or None."""
+    try:
+        import anthropic
+        api_key = st.secrets.get("anthropic_api_key", None)
+        if not api_key:
+            return None
+
+        client = anthropic.Anthropic(api_key=api_key)
+
+        system_prompt = """Eres un profesor de español experto en la evaluación AAPPL para estudiantes de nivel intermedio (7mo grado).
+Tu trabajo es dar retroalimentación constructiva, específica y alentadora sobre la escritura de los estudiantes.
+Siempre responde completamente en español.
+Sé amable pero honesto. Da ejemplos concretos del texto del estudiante.
+Mantén tu respuesta entre 150 y 250 palabras."""
+
+        user_prompt = f"""Evalúa esta respuesta escrita de un estudiante de 7mo grado.
+
+TAREA: {task_id} — {title} ({level})
+PROMPT: {prompt_text}
+CRITERIOS AAPPL: {rubric}
+META DE PALABRAS: {target}
+
+RESPUESTA DEL ESTUDIANTE:
+{response_text}
+
+Por favor da retroalimentación en estas secciones:
+1. ✅ Lo que hiciste bien (2-3 puntos específicos)
+2. 📝 Lo que puedes mejorar (2-3 sugerencias concretas con ejemplos de tu texto)
+3. 🎯 Nivel aproximado AAPPL basado en esta respuesta"""
+
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            messages=[{"role": "user", "content": user_prompt}],
+            system=system_prompt
+        )
+        return message.content[0].text
+    except Exception as e:
+        return None
 
 # ── Page config ───────────────────────────────────────────
 st.set_page_config(
@@ -121,13 +150,11 @@ st.markdown("""
 
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 
-/* ── Force light-readable text everywhere ── */
 p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
 .stMarkdown p, .stMarkdown li { color: #1a1a2e !important; }
 .stTextArea label { color: #1a1a2e !important; }
 .stSelectbox label { color: #1a1a2e !important; }
 
-/* ── Override dark custom classes to work on light bg ── */
 .main-title { color: #1b3a6b !important; }
 .main-sub   { color: #4a5568 !important; }
 .prompt-box {
@@ -168,6 +195,18 @@ p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
 .word-good  { color: #047857 !important; font-weight: 600; }
 .word-over  { color: #991b1b !important; font-weight: 600; }
 
+.feedback-box {
+    background: #f0fdf4; border: 1px solid #86efac;
+    border-radius: 16px; padding: 1.4rem;
+    font-size: 0.95rem; line-height: 1.8; color: #1a1a2e !important;
+    margin-top: 1rem;
+}
+.feedback-box p, .feedback-box li { color: #1a1a2e !important; }
+.feedback-title {
+    font-weight: 700; font-size: 1rem;
+    color: #047857 !important; margin-bottom: 0.6rem;
+}
+
 .flashcard-front {
     background: #f0f4ff; border: 2px solid #c7d2fe;
     border-radius: 20px; padding: 2.5rem;
@@ -185,7 +224,7 @@ p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
 }
 .flashcard-back * { color: #1a1a2e !important; }
 
-/* ── Textarea ── */
+/* ── Textarea — spell-check & autocorrect disabled via CSS hint ── */
 .stTextArea textarea {
     background: #ffffff !important;
     border: 2px solid #c7d2fe !important;
@@ -207,24 +246,29 @@ p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
     cursor: not-allowed !important;
 }
 
-/* ── ñ button ── */
-.nbutton {
-    display: inline-block;
-    background: #4f46e5; color: white !important;
-    border: none; border-radius: 8px;
-    padding: 0.3rem 0.8rem; font-size: 1rem;
-    font-weight: 700; cursor: pointer;
-    margin-bottom: 0.4rem;
-    font-family: 'DM Sans', sans-serif;
-}
-.nbutton:hover { background: #3730a3; }
-
 .stButton > button {
     border-radius: 10px !important;
     font-family: 'DM Sans', sans-serif !important;
     font-weight: 600 !important;
 }
 </style>
+
+<!-- Disable spell-check on all textareas via JS -->
+<script>
+function disableSpellCheck() {
+    const textareas = document.querySelectorAll('textarea');
+    textareas.forEach(function(ta) {
+        ta.setAttribute('spellcheck', 'false');
+        ta.setAttribute('autocorrect', 'off');
+        ta.setAttribute('autocomplete', 'off');
+        ta.setAttribute('autocapitalize', 'off');
+    });
+}
+// Run on load and watch for new elements
+disableSpellCheck();
+const observer = new MutationObserver(disableSpellCheck);
+observer.observe(document.body, { childList: true, subtree: true });
+</script>
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════
@@ -531,7 +575,6 @@ with st.sidebar:
     st.markdown('<div class="main-sub" style="font-size:0.75rem">7th Grade · Intermediate</div>', unsafe_allow_html=True)
     st.divider()
 
-    # ── Teacher mode toggle ──
     if st.session_state.teacher_mode:
         st.markdown("🔐 **Teacher Dashboard**")
         if st.button("🚪 Exit Teacher Mode", use_container_width=True):
@@ -602,7 +645,6 @@ if st.session_state.teacher_mode:
 
     if not drive:
         st.warning("⚠️ Google Drive not connected yet. Add your credentials in Streamlit Cloud → Settings → Secrets.")
-        st.markdown("Once connected, all student Google Docs will appear here automatically.")
     else:
         folder_id = get_or_create_folder(drive, FOLDER_NAME)
 
@@ -614,7 +656,6 @@ if st.session_state.teacher_mode:
                 st.session_state.sheet_last_load = 0
                 st.rerun()
 
-        # Load docs
         now = time.time()
         if folder_id and (now - st.session_state.sheet_last_load > 30):
             st.session_state.sheet_cache = list_student_docs(drive, folder_id)
@@ -625,16 +666,13 @@ if st.session_state.teacher_mode:
         if not docs_list:
             st.info("No submissions yet. Docs will appear here as students submit their writing.")
         else:
-            # Summary
             col1, col2 = st.columns(2)
             col1.metric("Total Submissions", len(docs_list))
             students_set = set(d["name"].split("—")[0].strip() for d in docs_list if "—" in d["name"])
             col2.metric("Students", len(students_set))
             st.divider()
 
-            # Filter
             filter_name = st.text_input("🔍 Search by student name:", placeholder="Type to filter...")
-
             filtered = [d for d in docs_list if filter_name.lower() in d["name"].lower()] if filter_name else docs_list
             st.markdown(f"**{len(filtered)} document(s)**")
             st.divider()
@@ -642,8 +680,8 @@ if st.session_state.teacher_mode:
             GRADE_OPTIONS = ["—", "Exceeds", "Meets", "Approaching", "Beginning"]
 
             for i, doc in enumerate(filtered):
-                name  = doc.get("name","")
-                link  = doc.get("webViewLink","")
+                name    = doc.get("name","")
+                link    = doc.get("webViewLink","")
                 created = doc.get("createdTime","")[:10] if doc.get("createdTime") else ""
 
                 c1, c2, c3 = st.columns([4, 2, 2])
@@ -655,7 +693,6 @@ if st.session_state.teacher_mode:
                     if link:
                         st.markdown(f"[📄 Open Doc]({link})")
 
-                # Grade + note
                 gc1, gc2 = st.columns([2,4])
                 with gc1:
                     grade_key = f"grade_{i}"
@@ -671,8 +708,6 @@ if st.session_state.teacher_mode:
                 st.divider()
 
     st.stop()
-
-
 
 # ═══════════════════════════════════════════════════════════
 # HOME
@@ -706,7 +741,7 @@ if st.session_state.screen == "home":
 
     with col3:
         st.markdown('<div class="badge badge-green">✍️ Writing</div>', unsafe_allow_html=True)
-        st.markdown("**Escritura AAPPL**\n\n31 prompts · P / Q / C / E categories · 10-min timer")
+        st.markdown("**Escritura AAPPL**\n\n31 prompts · P / Q / C / E categories · 10-min timer · AI feedback")
         if st.button("Open Escritura →", key="nav_writing", use_container_width=True):
             st.session_state.screen = "writing"; st.rerun()
 
@@ -716,7 +751,6 @@ if st.session_state.screen == "home":
 elif st.session_state.screen == "vocab":
     st.markdown("### 🃏 Vocabulario")
 
-    # Set selector
     selected_set = st.selectbox("Topic set / Tema:", list(VOCAB_SETS.keys()),
                                  index=list(VOCAB_SETS.keys()).index(st.session_state.vocab_set))
     if selected_set != st.session_state.vocab_set:
@@ -927,9 +961,9 @@ elif st.session_state.screen == "writing":
                         index=list(WRITING_TASKS.keys()).index(st.session_state.writing_cat),
                         label_visibility="collapsed")
     if cat != st.session_state.writing_cat:
-        st.session_state.writing_cat     = cat
-        st.session_state.writing_idx     = 0
-        st.session_state.writing_started = False
+        st.session_state.writing_cat       = cat
+        st.session_state.writing_idx       = 0
+        st.session_state.writing_started   = False
         st.session_state.writing_timer_end = None
         st.rerun()
 
@@ -943,15 +977,15 @@ elif st.session_state.screen == "writing":
     c1, c2, c3 = st.columns([1,4,1])
     with c1:
         if st.button("← Prev", use_container_width=True):
-            st.session_state.writing_idx     = (idx - 1) % len(tasks)
-            st.session_state.writing_started = False
+            st.session_state.writing_idx       = (idx - 1) % len(tasks)
+            st.session_state.writing_started   = False
             st.session_state.writing_timer_end = None; st.rerun()
     with c2:
         st.markdown(f"**{idx+1} / {len(tasks)}** — {tid} · {level} · {title}")
     with c3:
         if st.button("Next →", use_container_width=True):
-            st.session_state.writing_idx     = (idx + 1) % len(tasks)
-            st.session_state.writing_started = False
+            st.session_state.writing_idx       = (idx + 1) % len(tasks)
+            st.session_state.writing_started   = False
             st.session_state.writing_timer_end = None; st.rerun()
 
     already_done = key_resp in st.session_state.writing_responses
@@ -999,13 +1033,13 @@ elif st.session_state.screen == "writing":
                     st.markdown('<div class="timer-big timer-red">⏰ Time\'s up!</div>', unsafe_allow_html=True)
                     timed_out = True
 
-            saved   = st.session_state.writing_responses.get(key_resp, {})
+            saved     = st.session_state.writing_responses.get(key_resp, {})
             is_locked = already_done or timed_out
 
             if is_locked and not already_done:
                 st.warning("⏰ Time's up! Your response is locked. Click **Submit** to send it to your teacher.")
 
-            # ── ñ and special characters helper ──
+            # ── Special characters ──
             if not is_locked:
                 st.markdown("**Special characters / Caracteres especiales:**")
                 special_chars = ["ñ", "Ñ", "á", "é", "í", "ó", "ú", "ü", "¿", "¡"]
@@ -1026,7 +1060,7 @@ elif st.session_state.screen == "writing":
                 disabled=is_locked,
                 key=f"textarea_{key_resp}",
                 placeholder="Escribe tu respuesta aquí... / Write your response here...",
-                help="Click inside this box and start typing. Use the buttons above to insert ñ and accents."
+                help="Spell-check is disabled. Use the buttons above for ñ and accents."
             )
 
             # Word count
@@ -1034,53 +1068,64 @@ elif st.session_state.screen == "writing":
             wc_class = "word-good" if min_w <= words <= max_w else "word-over" if words > max_w else "word-count"
             st.markdown(f'<div class="{wc_class}">{words} words (target: {target})</div>', unsafe_allow_html=True)
 
+            # ── Already submitted ──
             if already_done:
+                st.success("✅ Submitted! / ¡Enviado!")
                 doc_url = saved.get("doc_url")
-                st.success("✅ Submitted! Your teacher will review it. / ¡Enviado! Tu maestra lo revisará.")
                 if doc_url:
-                    st.markdown(f"📄 [Open your Google Doc]({doc_url})", unsafe_allow_html=False)
+                    st.markdown(f"📄 [Open your Google Doc]({doc_url})")
+
+                # Show AI feedback if it was saved
+                ai_fb = saved.get("ai_feedback")
+                if ai_fb:
+                    st.markdown('<div class="feedback-box"><div class="feedback-title">🤖 AI Feedback / Retroalimentación</div>' +
+                                ai_fb.replace("\n", "<br>") + '</div>', unsafe_allow_html=True)
+                elif saved.get("ai_feedback_attempted"):
+                    st.info("ℹ️ AI feedback is not available yet. Ask your teacher to add the Anthropic API key.")
+
+            # ── Submit button ──
             else:
-                if st.button("📤 Submit to Teacher", type="primary", use_container_width=True,
+                if st.button("📤 Submit & Get AI Feedback", type="primary", use_container_width=True,
                              disabled=not response_text.strip()):
-                    with st.spinner("Creating your Google Doc..."):
+
+                    ai_feedback = None
+                    ai_attempted = False
+
+                    # Step 1 — Get AI feedback
+                    with st.spinner("🤖 Getting AI feedback on your writing..."):
+                        ai_feedback  = get_ai_feedback(
+                            st.session_state.student_name,
+                            tid, level, title, prompt_text, rubric, target,
+                            response_text
+                        )
+                        ai_attempted = True
+
+                    # Step 2 — Create Google Doc (includes feedback)
+                    with st.spinner("📄 Saving to Google Drive..."):
                         drive, docs_svc = get_drive_service()
                         doc_url = None
                         if drive and docs_svc:
                             folder_id = get_or_create_folder(drive, FOLDER_NAME)
                             if folder_id:
-                                doc_url, doc_id = create_student_doc(
+                                doc_url, _ = create_student_doc(
                                     drive, docs_svc, folder_id,
                                     st.session_state.student_name,
-                                    tid, level, title, task[3], rubric, target
+                                    tid, level, title, task[3], rubric, target,
+                                    response_text, ai_feedback
                                 )
-                                # Append student's response to the doc
-                                if doc_id and response_text.strip():
-                                    try:
-                                        # Get current end index
-                                        doc_info = docs_svc.documents().get(documentId=doc_id).execute()
-                                        end_idx  = doc_info["body"]["content"][-1]["endIndex"] - 1
-                                        docs_svc.documents().batchUpdate(
-                                            documentId=doc_id,
-                                            body={"requests": [{"insertText": {
-                                                "location": {"index": end_idx},
-                                                "text": response_text
-                                            }}]}
-                                        ).execute()
-                                    except Exception:
-                                        pass
 
+                    # Step 3 — Save to session
                     st.session_state.writing_responses[key_resp] = {
-                        "text": response_text, "submitted": True,
-                        "words": words, "task": f"{tid} — {title}",
-                        "level": level, "doc_url": doc_url
+                        "text":                response_text,
+                        "submitted":           True,
+                        "words":               words,
+                        "task":                f"{tid} — {title}",
+                        "level":               level,
+                        "doc_url":             doc_url,
+                        "ai_feedback":         ai_feedback,
+                        "ai_feedback_attempted": ai_attempted,
                     }
                     st.session_state.writing_timer_end = None
-
-                    if doc_url:
-                        st.success("✅ Google Doc created! Your teacher can now see your response.")
-                        st.markdown(f"📄 [Open your Google Doc]({doc_url})")
-                    else:
-                        st.success("✅ Submitted!")
                     st.rerun()
 
             # Auto-refresh timer
