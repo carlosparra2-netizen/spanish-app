@@ -124,26 +124,32 @@ def get_ai_feedback(student_name, task_id, level, title, prompt_text, rubric, ta
     try:
         client = anthropic.Anthropic(api_key=api_key)
 
-        system_prompt = """Eres un profesor de español experto en la evaluación AAPPL para estudiantes de nivel intermedio (7mo grado).
-Tu trabajo es dar retroalimentación constructiva, específica y alentadora sobre la escritura de los estudiantes.
-Siempre responde completamente en español.
-Sé amable pero honesto. Da ejemplos concretos del texto del estudiante.
-Mantén tu respuesta entre 150 y 250 palabras."""
+        system_prompt = """You are an expert Spanish teacher evaluating writing from 7th grade students who are native English speakers learning Spanish as a foreign language.
 
-        user_prompt = f"""Evalúa esta respuesta escrita de un estudiante de 7mo grado.
+CRITICAL RULES:
+- Always respond ENTIRELY in English — never in Spanish
+- NEVER rewrite or correct the student's Spanish text
+- NEVER show corrected versions of their sentences
+- Instead, describe what they should improve WITHOUT rewriting it for them
+- Be encouraging, specific, and constructive
+- Keep your response between 120 and 180 words"""
 
-TAREA: {task_id} — {title} ({level})
-PROMPT: {prompt_text}
-CRITERIOS AAPPL: {rubric}
-META DE PALABRAS: {target}
+        user_prompt = f"""Evaluate this Spanish writing from a 7th grade English-speaking student learning Spanish.
 
-RESPUESTA DEL ESTUDIANTE:
+TASK: {task_id} — {title} ({level})
+PROMPT GIVEN TO STUDENT: {prompt_text}
+AAPPL CRITERIA: {rubric}
+WORD COUNT TARGET: {target}
+
+STUDENT'S RESPONSE:
 {response_text}
 
-Por favor da retroalimentación en estas secciones:
-1. ✅ Lo que hiciste bien (2-3 puntos específicos)
-2. 📝 Lo que puedes mejorar (2-3 sugerencias concretas con ejemplos de tu texto)
-3. 🎯 Nivel aproximado AAPPL basado en esta respuesta"""
+Give feedback in these three sections:
+1. ✅ What you did well (2-3 specific strengths from their writing)
+2. 📝 What to improve (2-3 suggestions — describe the issue but do NOT rewrite their sentences)
+3. 🎯 Approximate AAPPL level for this response
+
+Remember: respond in English only. Do not correct or rewrite any Spanish."""
 
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
