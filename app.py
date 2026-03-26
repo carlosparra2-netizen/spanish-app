@@ -98,13 +98,27 @@ def get_ai_feedback(student_name, task_id, level, title, prompt_text, rubric, ta
     """Call Claude API to get writing feedback. Returns (feedback_text, error_msg)."""
     import anthropic
 
-    # Robust key reading
+    # Robust key reading — try all methods
     api_key = None
     try:
         api_key = str(st.secrets["anthropic_api_key"]).strip()
     except Exception:
         pass
     if not api_key:
+        try:
+            api_key = str(st.secrets.get("anthropic_api_key", "")).strip()
+        except Exception:
+            pass
+    if not api_key:
+        try:
+            # Sometimes Streamlit wraps secrets in a dict-like object
+            for k, v in st.secrets.items():
+                if k == "anthropic_api_key":
+                    api_key = str(v).strip()
+                    break
+        except Exception:
+            pass
+    if not api_key or api_key == "None":
         return None, "NO_KEY"
 
     try:
@@ -256,75 +270,25 @@ p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
     border-radius: 10px !important;
     font-family: 'DM Sans', sans-serif !important;
     font-weight: 600 !important;
+    font-size: 1.1rem !important;
 }
 
-/* ── Special char buttons ── */
-.char-grid {
-    display: flex; flex-wrap: wrap; gap: 6px;
-    margin-bottom: 10px;
-}
-.char-btn {
-    background: #4f46e5;
+/* ── Special char buttons — bigger touch targets ── */
+div[data-testid="column"] .stButton > button {
+    font-size: 1.3rem !important;
+    font-weight: 700 !important;
+    padding: 0.4rem 0 !important;
+    min-height: 3rem !important;
+    background-color: #4f46e5 !important;
     color: white !important;
-    border: none;
-    border-radius: 10px;
-    font-size: 1.25rem;
-    font-weight: 700;
-    font-family: 'DM Sans', sans-serif;
-    width: 52px; height: 52px;
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    transition: background 0.15s;
-    display: flex; align-items: center; justify-content: center;
+    border: none !important;
 }
-.char-btn:hover  { background: #3730a3; }
-.char-btn:active { background: #312e81; transform: scale(0.94); }
-.char-label {
-    font-size: 0.75rem; color: #4a5568 !important;
-    margin-bottom: 4px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.05em;
+div[data-testid="column"] .stButton > button:hover {
+    background-color: #3730a3 !important;
 }
 </style>
 
 <script>
-// ── Insert character at cursor — React-compatible ──
-function insertChar(char) {
-    // Find the writing textarea (not name input etc.)
-    const textareas = document.querySelectorAll('textarea');
-    let textarea = null;
-    // Prefer the largest / writing textarea
-    let maxLen = -1;
-    textareas.forEach(function(ta) {
-        if (!ta.disabled && ta.offsetHeight > maxLen) {
-            maxLen = ta.offsetHeight;
-            textarea = ta;
-        }
-    });
-    if (!textarea) return;
-
-    const start = textarea.selectionStart ?? textarea.value.length;
-    const end   = textarea.selectionEnd   ?? textarea.value.length;
-    const before = textarea.value.substring(0, start);
-    const after  = textarea.value.substring(end);
-    const newVal = before + char + after;
-
-    // Use React internal setter so React state updates
-    const proto = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype, 'value'
-    );
-    proto.set.call(textarea, newVal);
-
-    // Dispatch both input and change for React
-    textarea.dispatchEvent(new Event('input',  { bubbles: true }));
-    textarea.dispatchEvent(new Event('change', { bubbles: true }));
-
-    // Restore cursor position
-    const pos = start + char.length;
-    textarea.focus();
-    textarea.setSelectionRange(pos, pos);
-}
-
 // ── Disable spell-check ──
 function disableSpellCheck() {
     document.querySelectorAll('textarea').forEach(function(ta) {
@@ -1107,32 +1071,19 @@ elif st.session_state.screen == "writing":
             if is_locked and not already_done:
                 st.warning("⏰ Time's up! Your response is locked. Click **Submit** to send it to your teacher.")
 
-            # ── Special characters — mousedown preserves textarea focus ──
+            # ── Special characters — pure Streamlit buttons ──
             if not is_locked:
-                chars_html = """
-<div class="char-label">Toca para insertar &nbsp;·&nbsp; Tap to insert</div>
-<div class="char-grid">
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('á')" ontouchend="event.preventDefault();insertChar('á')">á</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('é')" ontouchend="event.preventDefault();insertChar('é')">é</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('í')" ontouchend="event.preventDefault();insertChar('í')">í</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('ó')" ontouchend="event.preventDefault();insertChar('ó')">ó</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('ú')" ontouchend="event.preventDefault();insertChar('ú')">ú</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('ü')" ontouchend="event.preventDefault();insertChar('ü')">ü</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('ñ')" ontouchend="event.preventDefault();insertChar('ñ')">ñ</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('¿')" ontouchend="event.preventDefault();insertChar('¿')">¿</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('¡')" ontouchend="event.preventDefault();insertChar('¡')">¡</button>
-</div>
-<div class="char-grid">
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Á')" ontouchend="event.preventDefault();insertChar('Á')">Á</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('É')" ontouchend="event.preventDefault();insertChar('É')">É</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Í')" ontouchend="event.preventDefault();insertChar('Í')">Í</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Ó')" ontouchend="event.preventDefault();insertChar('Ó')">Ó</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Ú')" ontouchend="event.preventDefault();insertChar('Ú')">Ú</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Ü')" ontouchend="event.preventDefault();insertChar('Ü')">Ü</button>
-  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Ñ')" ontouchend="event.preventDefault();insertChar('Ñ')">Ñ</button>
-</div>
-"""
-                st.markdown(chars_html, unsafe_allow_html=True)
+                st.markdown("**Toca para insertar · Tap to insert:**")
+                all_chars = ["á","é","í","ó","ú","ü","ñ","¿","¡","Á","É","Í","Ó","Ú","Ü","Ñ"]
+                char_cols = st.columns(len(all_chars))
+                for ci, char in enumerate(all_chars):
+                    with char_cols[ci]:
+                        if st.button(char, key=f"ch_{key_resp}_{ci}",
+                                     use_container_width=True):
+                            cur = st.session_state.get(f"textarea_{key_resp}",
+                                                       saved.get("text", ""))
+                            st.session_state[f"textarea_{key_resp}"] = cur + char
+                            st.rerun()
 
             # ── Text area ──
             init_val = st.session_state.get(f"textarea_{key_resp}", saved.get("text",""))
