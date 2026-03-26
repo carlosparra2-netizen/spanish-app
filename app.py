@@ -244,7 +244,7 @@ p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
 }
 .flashcard-back * { color: #1a1a2e !important; }
 
-/* ── Textarea — spell-check & autocorrect disabled via CSS hint ── */
+/* ── Textarea — spell-check & autocorrect disabled ── */
 .stTextArea textarea {
     background: #ffffff !important;
     border: 2px solid #c7d2fe !important;
@@ -255,6 +255,8 @@ p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
     line-height: 1.7 !important;
     pointer-events: auto !important;
     cursor: text !important;
+    spellcheck: false;
+    -webkit-spell-check: false;
 }
 .stTextArea textarea:focus {
     border-color: #4f46e5 !important;
@@ -289,16 +291,21 @@ div[data-testid="column"] .stButton > button:hover {
 </style>
 
 <script>
-// ── Disable spell-check ──
+// ── Disable spell-check & autocorrect aggressively ──
 function disableSpellCheck() {
-    document.querySelectorAll('textarea').forEach(function(ta) {
-        ta.setAttribute('spellcheck', 'false');
-        ta.setAttribute('autocorrect', 'off');
-        ta.setAttribute('autocomplete', 'off');
-        ta.setAttribute('autocapitalize', 'off');
+    document.querySelectorAll('textarea, input[type="text"], input:not([type])').forEach(function(el) {
+        el.setAttribute('spellcheck', 'false');
+        el.setAttribute('autocorrect', 'off');
+        el.setAttribute('autocomplete', 'off');
+        el.setAttribute('autocapitalize', 'off');
+        el.setAttribute('data-gramm', 'false');
+        el.setAttribute('data-gramm_editor', 'false');
+        el.setAttribute('data-enable-grammarly', 'false');
     });
 }
+// Run immediately, on interval, and on DOM changes
 disableSpellCheck();
+setInterval(disableSpellCheck, 500);
 const _obs = new MutationObserver(disableSpellCheck);
 _obs.observe(document.body, { childList: true, subtree: true });
 </script>
@@ -1087,15 +1094,31 @@ elif st.session_state.screen == "writing":
 
             # ── Text area ──
             init_val = st.session_state.get(f"textarea_{key_resp}", saved.get("text",""))
+            # Render textarea — spellcheck disabled via JS above
             response_text = st.text_area(
-                f"✍️ Write your response here (target: {target})",
+                f"✍️ Escribe aquí (meta: {target})",
                 value=init_val,
                 height=320,
                 disabled=is_locked,
                 key=f"textarea_{key_resp}",
-                placeholder="Escribe tu respuesta aquí... / Write your response here...",
-                help="Spell-check is disabled. Use the buttons above for ñ and accents."
+                placeholder="Escribe tu respuesta aquí...",
+                help="No hay autocorrección. Usa los botones de arriba para ñ y acentos."
             )
+            # Inject spellcheck=false directly onto this specific textarea
+            st.markdown("""
+<script>
+(function() {
+    var tas = document.querySelectorAll('textarea');
+    tas.forEach(function(ta) {
+        ta.spellcheck = false;
+        ta.setAttribute('spellcheck','false');
+        ta.setAttribute('autocorrect','off');
+        ta.setAttribute('autocomplete','off');
+        ta.setAttribute('autocapitalize','off');
+    });
+})();
+</script>
+""", unsafe_allow_html=True)
 
             # Word count
             words = len(response_text.split()) if response_text.strip() else 0
