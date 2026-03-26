@@ -95,13 +95,19 @@ def list_student_docs(drive, folder_id):
 
 # ── AI Feedback ───────────────────────────────────────────
 def get_ai_feedback(student_name, task_id, level, title, prompt_text, rubric, target, response_text):
-    """Call Claude API to get writing feedback. Returns feedback string or None."""
-    try:
-        import anthropic
-        api_key = st.secrets.get("anthropic_api_key", None)
-        if not api_key:
-            return None
+    """Call Claude API to get writing feedback. Returns (feedback_text, error_msg)."""
+    import anthropic
 
+    # Robust key reading
+    api_key = None
+    try:
+        api_key = str(st.secrets["anthropic_api_key"]).strip()
+    except Exception:
+        pass
+    if not api_key:
+        return None, "NO_KEY"
+
+    try:
         client = anthropic.Anthropic(api_key=api_key)
 
         system_prompt = """Eres un profesor de español experto en la evaluación AAPPL para estudiantes de nivel intermedio (7mo grado).
@@ -131,9 +137,9 @@ Por favor da retroalimentación en estas secciones:
             messages=[{"role": "user", "content": user_prompt}],
             system=system_prompt
         )
-        return message.content[0].text
+        return message.content[0].text, None
     except Exception as e:
-        return None
+        return None, str(e)
 
 # ── Page config ───────────────────────────────────────────
 st.set_page_config(
@@ -282,27 +288,41 @@ p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
 </style>
 
 <script>
-// ── Insert character at cursor position ──
+// ── Insert character at cursor — React-compatible ──
 function insertChar(char) {
-    const textarea = document.querySelector('textarea');
+    // Find the writing textarea (not name input etc.)
+    const textareas = document.querySelectorAll('textarea');
+    let textarea = null;
+    // Prefer the largest / writing textarea
+    let maxLen = -1;
+    textareas.forEach(function(ta) {
+        if (!ta.disabled && ta.offsetHeight > maxLen) {
+            maxLen = ta.offsetHeight;
+            textarea = ta;
+        }
+    });
     if (!textarea) return;
-    textarea.focus();
-    const start = textarea.selectionStart;
-    const end   = textarea.selectionEnd;
-    const val   = textarea.value;
-    const newVal = val.substring(0, start) + char + val.substring(end);
 
-    // Update React/Streamlit controlled input
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end   = textarea.selectionEnd   ?? textarea.value.length;
+    const before = textarea.value.substring(0, start);
+    const after  = textarea.value.substring(end);
+    const newVal = before + char + after;
+
+    // Use React internal setter so React state updates
+    const proto = Object.getOwnPropertyDescriptor(
         window.HTMLTextAreaElement.prototype, 'value'
-    ).set;
-    nativeInputValueSetter.call(textarea, newVal);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    );
+    proto.set.call(textarea, newVal);
 
-    // Restore cursor after inserted char
-    const newPos = start + char.length;
-    textarea.setSelectionRange(newPos, newPos);
+    // Dispatch both input and change for React
+    textarea.dispatchEvent(new Event('input',  { bubbles: true }));
+    textarea.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // Restore cursor position
+    const pos = start + char.length;
     textarea.focus();
+    textarea.setSelectionRange(pos, pos);
 }
 
 // ── Disable spell-check ──
@@ -620,7 +640,7 @@ init_state()
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown('<div class="main-title" style="font-size:2rem">¡Español!</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title" style="font-size:2.2rem">🇪🇸 ¡Español!</div>', unsafe_allow_html=True)
     st.divider()
 
     if st.session_state.teacher_mode:
@@ -761,7 +781,7 @@ if st.session_state.teacher_mode:
 # HOME
 # ═══════════════════════════════════════════════════════════
 if st.session_state.screen == "home":
-    st.markdown('<div class="main-title">¡Español!</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title" style="font-size:3rem">🇪🇸 ¡Español!</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="main-sub">Bienvenido/a, {st.session_state.student_name}! Elige una actividad.</div>', unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
@@ -1087,29 +1107,29 @@ elif st.session_state.screen == "writing":
             if is_locked and not already_done:
                 st.warning("⏰ Time's up! Your response is locked. Click **Submit** to send it to your teacher.")
 
-            # ── Special characters — HTML buttons, insert at cursor ──
+            # ── Special characters — mousedown preserves textarea focus ──
             if not is_locked:
                 chars_html = """
-<div class="char-label">Toca para insertar · Tap to insert</div>
+<div class="char-label">Toca para insertar &nbsp;·&nbsp; Tap to insert</div>
 <div class="char-grid">
-  <button class="char-btn" onclick="insertChar('á')">á</button>
-  <button class="char-btn" onclick="insertChar('é')">é</button>
-  <button class="char-btn" onclick="insertChar('í')">í</button>
-  <button class="char-btn" onclick="insertChar('ó')">ó</button>
-  <button class="char-btn" onclick="insertChar('ú')">ú</button>
-  <button class="char-btn" onclick="insertChar('ü')">ü</button>
-  <button class="char-btn" onclick="insertChar('ñ')">ñ</button>
-  <button class="char-btn" onclick="insertChar('¿')">¿</button>
-  <button class="char-btn" onclick="insertChar('¡')">¡</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('á')" ontouchend="event.preventDefault();insertChar('á')">á</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('é')" ontouchend="event.preventDefault();insertChar('é')">é</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('í')" ontouchend="event.preventDefault();insertChar('í')">í</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('ó')" ontouchend="event.preventDefault();insertChar('ó')">ó</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('ú')" ontouchend="event.preventDefault();insertChar('ú')">ú</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('ü')" ontouchend="event.preventDefault();insertChar('ü')">ü</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('ñ')" ontouchend="event.preventDefault();insertChar('ñ')">ñ</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('¿')" ontouchend="event.preventDefault();insertChar('¿')">¿</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('¡')" ontouchend="event.preventDefault();insertChar('¡')">¡</button>
 </div>
 <div class="char-grid">
-  <button class="char-btn" onclick="insertChar('Á')">Á</button>
-  <button class="char-btn" onclick="insertChar('É')">É</button>
-  <button class="char-btn" onclick="insertChar('Í')">Í</button>
-  <button class="char-btn" onclick="insertChar('Ó')">Ó</button>
-  <button class="char-btn" onclick="insertChar('Ú')">Ú</button>
-  <button class="char-btn" onclick="insertChar('Ü')">Ü</button>
-  <button class="char-btn" onclick="insertChar('Ñ')">Ñ</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Á')" ontouchend="event.preventDefault();insertChar('Á')">Á</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('É')" ontouchend="event.preventDefault();insertChar('É')">É</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Í')" ontouchend="event.preventDefault();insertChar('Í')">Í</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Ó')" ontouchend="event.preventDefault();insertChar('Ó')">Ó</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Ú')" ontouchend="event.preventDefault();insertChar('Ú')">Ú</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Ü')" ontouchend="event.preventDefault();insertChar('Ü')">Ü</button>
+  <button class="char-btn" onmousedown="event.preventDefault();insertChar('Ñ')" ontouchend="event.preventDefault();insertChar('Ñ')">Ñ</button>
 </div>
 """
                 st.markdown(chars_html, unsafe_allow_html=True)
@@ -1139,12 +1159,17 @@ elif st.session_state.screen == "writing":
                     st.markdown(f"📄 [Open your Google Doc]({doc_url})")
 
                 # Show AI feedback if it was saved
-                ai_fb = saved.get("ai_feedback")
+                ai_fb  = saved.get("ai_feedback")
+                ai_err = saved.get("ai_error")
                 if ai_fb:
-                    st.markdown('<div class="feedback-box"><div class="feedback-title">🤖 AI Feedback / Retroalimentación</div>' +
+                    st.markdown('<div class="feedback-box"><div class="feedback-title">🤖 Retroalimentación de IA</div>' +
                                 ai_fb.replace("\n", "<br>") + '</div>', unsafe_allow_html=True)
+                elif ai_err == "NO_KEY":
+                    st.warning("⚠️ La API key de Anthropic no está configurada en Streamlit Secrets.")
+                elif ai_err:
+                    st.warning(f"⚠️ Error al generar retroalimentación: {ai_err}")
                 elif saved.get("ai_feedback_attempted"):
-                    st.info("ℹ️ AI feedback is not available yet. Ask your teacher to add the Anthropic API key.")
+                    st.info("ℹ️ No se pudo generar retroalimentación de IA.")
 
             # ── Submit button ──
             else:
@@ -1155,8 +1180,8 @@ elif st.session_state.screen == "writing":
                     ai_attempted = False
 
                     # Step 1 — Get AI feedback
-                    with st.spinner("🤖 Getting AI feedback on your writing..."):
-                        ai_feedback  = get_ai_feedback(
+                    with st.spinner("🤖 Generando retroalimentación de IA..."):
+                        ai_feedback, ai_error = get_ai_feedback(
                             st.session_state.student_name,
                             tid, level, title, prompt_text, rubric, target,
                             response_text
@@ -1186,6 +1211,7 @@ elif st.session_state.screen == "writing":
                         "level":               level,
                         "doc_url":             doc_url,
                         "ai_feedback":         ai_feedback,
+                        "ai_error":            ai_error,
                         "ai_feedback_attempted": ai_attempted,
                     }
                     st.session_state.writing_timer_end = None
