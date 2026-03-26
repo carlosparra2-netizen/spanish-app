@@ -251,23 +251,72 @@ p, li, span, div, label, h1, h2, h3, h4, h5 { color: #1a1a2e !important; }
     font-family: 'DM Sans', sans-serif !important;
     font-weight: 600 !important;
 }
+
+/* ── Special char buttons ── */
+.char-grid {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-bottom: 10px;
+}
+.char-btn {
+    background: #4f46e5;
+    color: white !important;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-family: 'DM Sans', sans-serif;
+    width: 52px; height: 52px;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s;
+    display: flex; align-items: center; justify-content: center;
+}
+.char-btn:hover  { background: #3730a3; }
+.char-btn:active { background: #312e81; transform: scale(0.94); }
+.char-label {
+    font-size: 0.75rem; color: #4a5568 !important;
+    margin-bottom: 4px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
 </style>
 
-<!-- Disable spell-check on all textareas via JS -->
 <script>
+// ── Insert character at cursor position ──
+function insertChar(char) {
+    const textarea = document.querySelector('textarea');
+    if (!textarea) return;
+    textarea.focus();
+    const start = textarea.selectionStart;
+    const end   = textarea.selectionEnd;
+    const val   = textarea.value;
+    const newVal = val.substring(0, start) + char + val.substring(end);
+
+    // Update React/Streamlit controlled input
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype, 'value'
+    ).set;
+    nativeInputValueSetter.call(textarea, newVal);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // Restore cursor after inserted char
+    const newPos = start + char.length;
+    textarea.setSelectionRange(newPos, newPos);
+    textarea.focus();
+}
+
+// ── Disable spell-check ──
 function disableSpellCheck() {
-    const textareas = document.querySelectorAll('textarea');
-    textareas.forEach(function(ta) {
+    document.querySelectorAll('textarea').forEach(function(ta) {
         ta.setAttribute('spellcheck', 'false');
         ta.setAttribute('autocorrect', 'off');
         ta.setAttribute('autocomplete', 'off');
         ta.setAttribute('autocapitalize', 'off');
     });
 }
-// Run on load and watch for new elements
 disableSpellCheck();
-const observer = new MutationObserver(disableSpellCheck);
-observer.observe(document.body, { childList: true, subtree: true });
+const _obs = new MutationObserver(disableSpellCheck);
+_obs.observe(document.body, { childList: true, subtree: true });
 </script>
 """, unsafe_allow_html=True)
 
@@ -572,7 +621,6 @@ init_state()
 # ═══════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown('<div class="main-title" style="font-size:2rem">¡Español!</div>', unsafe_allow_html=True)
-    st.markdown('<div class="main-sub" style="font-size:0.75rem">7th Grade · Intermediate</div>', unsafe_allow_html=True)
     st.divider()
 
     if st.session_state.teacher_mode:
@@ -629,7 +677,7 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════
 if not st.session_state.name_entered and not st.session_state.teacher_mode:
     st.markdown('<div class="main-title">¡Español!</div>', unsafe_allow_html=True)
-    st.markdown('<div class="main-sub">Spanish Practice · 7th Grade · Intermediate</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-sub">Spanish Practice</div>', unsafe_allow_html=True)
     st.info("👈  Enter your name in the sidebar to get started.")
     st.stop()
 
@@ -714,7 +762,7 @@ if st.session_state.teacher_mode:
 # ═══════════════════════════════════════════════════════════
 if st.session_state.screen == "home":
     st.markdown('<div class="main-title">¡Español!</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="main-sub">Welcome, {st.session_state.student_name}! Choose an activity.</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="main-sub">Bienvenido/a, {st.session_state.student_name}! Elige una actividad.</div>', unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -1039,17 +1087,32 @@ elif st.session_state.screen == "writing":
             if is_locked and not already_done:
                 st.warning("⏰ Time's up! Your response is locked. Click **Submit** to send it to your teacher.")
 
-            # ── Special characters ──
+            # ── Special characters — HTML buttons, insert at cursor ──
             if not is_locked:
-                st.markdown("**Special characters / Caracteres especiales:**")
-                special_chars = ["ñ", "Ñ", "á", "é", "í", "ó", "ú", "ü", "¿", "¡"]
-                char_cols = st.columns(len(special_chars))
-                for i, char in enumerate(special_chars):
-                    with char_cols[i]:
-                        if st.button(char, key=f"char_{key_resp}_{i}", use_container_width=True):
-                            current = st.session_state.get(f"textarea_{key_resp}", saved.get("text",""))
-                            st.session_state[f"textarea_{key_resp}"] = current + char
-                            st.rerun()
+                chars_html = """
+<div class="char-label">Toca para insertar · Tap to insert</div>
+<div class="char-grid">
+  <button class="char-btn" onclick="insertChar('á')">á</button>
+  <button class="char-btn" onclick="insertChar('é')">é</button>
+  <button class="char-btn" onclick="insertChar('í')">í</button>
+  <button class="char-btn" onclick="insertChar('ó')">ó</button>
+  <button class="char-btn" onclick="insertChar('ú')">ú</button>
+  <button class="char-btn" onclick="insertChar('ü')">ü</button>
+  <button class="char-btn" onclick="insertChar('ñ')">ñ</button>
+  <button class="char-btn" onclick="insertChar('¿')">¿</button>
+  <button class="char-btn" onclick="insertChar('¡')">¡</button>
+</div>
+<div class="char-grid">
+  <button class="char-btn" onclick="insertChar('Á')">Á</button>
+  <button class="char-btn" onclick="insertChar('É')">É</button>
+  <button class="char-btn" onclick="insertChar('Í')">Í</button>
+  <button class="char-btn" onclick="insertChar('Ó')">Ó</button>
+  <button class="char-btn" onclick="insertChar('Ú')">Ú</button>
+  <button class="char-btn" onclick="insertChar('Ü')">Ü</button>
+  <button class="char-btn" onclick="insertChar('Ñ')">Ñ</button>
+</div>
+"""
+                st.markdown(chars_html, unsafe_allow_html=True)
 
             # ── Text area ──
             init_val = st.session_state.get(f"textarea_{key_resp}", saved.get("text",""))
