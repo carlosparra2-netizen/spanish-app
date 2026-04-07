@@ -9,6 +9,14 @@ PROJECT_ID   = "spanish-app-490602"
 CLIENT_EMAIL = "spanish-app-service@spanish-app-490602.iam.gserviceaccount.com"
 FOLDER_NAME  = "Español App"
 
+TEACHERS = {
+    "Sra. Conlan":  "conlan",
+    "Sra. Leiler":  "leiler",
+    "Sra. B W":     "emily",
+    "Sr. Kevin":    "kevin",
+    "Sr. Carlos":   "parra",
+}
+
 def get_drive_service():
     try:
         from google.oauth2.service_account import Credentials
@@ -35,6 +43,23 @@ def get_or_create_folder(drive, name):
         if files:
             return files[0]["id"]
         meta = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
+        folder = drive.files().create(body=meta, fields="id").execute()
+        return folder["id"]
+    except Exception:
+        return None
+
+def get_or_create_subfolder(drive, parent_id, subfolder_name):
+    try:
+        q = f"name='{subfolder_name}' and '{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        res = drive.files().list(q=q, fields="files(id,name)").execute()
+        files = res.get("files", [])
+        if files:
+            return files[0]["id"]
+        meta = {
+            "name": subfolder_name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent_id]
+        }
         folder = drive.files().create(body=meta, fields="id").execute()
         return folder["id"]
     except Exception:
@@ -98,7 +123,6 @@ def get_ai_feedback(student_name, task_id, level, title, prompt_text, rubric, ta
     """Call Claude API to get writing feedback. Returns (feedback_text, error_msg)."""
     import anthropic
 
-    # Robust key reading — try all methods
     api_key = None
     try:
         api_key = str(st.secrets["anthropic_api_key"]).strip()
@@ -111,7 +135,6 @@ def get_ai_feedback(student_name, task_id, level, title, prompt_text, rubric, ta
             pass
     if not api_key:
         try:
-            # Sometimes Streamlit wraps secrets in a dict-like object
             for k, v in st.secrets.items():
                 if k == "anthropic_api_key":
                     api_key = str(v).strip()
@@ -309,7 +332,6 @@ function disableSpellCheck() {
         el.setAttribute('data-enable-grammarly', 'false');
     });
 }
-// Run immediately, on interval, and on DOM changes
 disableSpellCheck();
 setInterval(disableSpellCheck, 500);
 const _obs = new MutationObserver(disableSpellCheck);
@@ -601,8 +623,10 @@ def init_state():
         "writing_timer_end": None,
         "writing_responses": {},
         "student_name": "",
+        "selected_teacher": list(TEACHERS.keys())[0],
         "name_entered": False,
         "teacher_mode": False,
+        "teacher_name": "",
         "teacher_pw_attempt": "",
         "sheet_cache": None,
         "sheet_last_load": 0,
@@ -621,9 +645,10 @@ with st.sidebar:
     st.divider()
 
     if st.session_state.teacher_mode:
-        st.markdown("🔐 **Teacher Dashboard**")
+        st.markdown(f"🔐 **{st.session_state.teacher_name}**")
         if st.button("🚪 Exit Teacher Mode", use_container_width=True):
             st.session_state.teacher_mode = False
+            st.session_state.teacher_name = ""
             st.session_state.name_entered = False
             st.session_state.student_name = ""
             st.rerun()
@@ -631,27 +656,33 @@ with st.sidebar:
         if not st.session_state.name_entered:
             st.markdown("**Enter your name to start:**")
             name_input = st.text_input("Your name", placeholder="Type your name here...", label_visibility="collapsed")
+            st.markdown("**Your teacher:**")
+            teacher_choice = st.selectbox("Teacher", list(TEACHERS.keys()), label_visibility="collapsed")
             if st.button("¡Entrar!", use_container_width=True, type="primary"):
                 if name_input.strip():
                     st.session_state.student_name = name_input.strip()
+                    st.session_state.selected_teacher = teacher_choice
                     st.session_state.name_entered = True
                     st.rerun()
                 else:
                     st.warning("Please enter your name first.")
             st.divider()
             with st.expander("🔐 Teacher login"):
+                teacher_sel = st.selectbox("Teacher:", list(TEACHERS.keys()), label_visibility="collapsed")
                 pw = st.text_input("Password", type="password", label_visibility="collapsed",
-                                   placeholder="Teacher password...")
+                                   placeholder="Password...")
                 if st.button("Login", use_container_width=True):
-                    teacher_pw = st.secrets.get("teacher_password", "maestro2024")
-                    if pw == teacher_pw:
+                    expected = TEACHERS.get(teacher_sel, "")
+                    if pw == expected:
                         st.session_state.teacher_mode = True
+                        st.session_state.teacher_name = teacher_sel
                         st.session_state.name_entered = True
                         st.rerun()
                     else:
                         st.error("Incorrect password.")
         else:
             st.markdown(f"👤 **{st.session_state.student_name}**")
+            st.markdown(f"👩‍🏫 {st.session_state.selected_teacher}")
             st.divider()
             st.markdown("**Go to:**")
             nav_items = [
@@ -682,8 +713,9 @@ if not st.session_state.name_entered and not st.session_state.teacher_mode:
 # TEACHER DASHBOARD
 # ═══════════════════════════════════════════════════════════
 if st.session_state.teacher_mode:
-    st.markdown("## 🔐 Teacher Dashboard")
-    st.markdown("All student writing submissions appear here as Google Docs in your Drive folder.")
+    teacher_label = st.session_state.get("teacher_name", "")
+    st.markdown(f"## 🔐 Teacher Dashboard — {teacher_label}")
+    st.markdown("Your students' writing submissions appear here as Google Docs.")
     st.divider()
 
     drive, docs_svc = get_drive_service()
@@ -691,11 +723,12 @@ if st.session_state.teacher_mode:
     if not drive:
         st.warning("⚠️ Google Drive not connected yet. Add your credentials in Streamlit Cloud → Settings → Secrets.")
     else:
-        folder_id = get_or_create_folder(drive, FOLDER_NAME)
+        root_id = get_or_create_folder(drive, FOLDER_NAME)
+        folder_id = get_or_create_subfolder(drive, root_id, teacher_label) if root_id and teacher_label else root_id
 
         c1, c2 = st.columns([3,1])
         with c1:
-            st.markdown(f"📁 Folder: **{FOLDER_NAME}** in your Google Drive")
+            st.markdown(f"📁 Folder: **{FOLDER_NAME} / {teacher_label}**")
         with c2:
             if st.button("🔄 Refresh", type="secondary", use_container_width=True):
                 st.session_state.sheet_last_load = 0
@@ -1084,7 +1117,7 @@ elif st.session_state.screen == "writing":
             if is_locked and not already_done:
                 st.warning("⏰ Time's up! Your response is locked. Click **Submit** to send it to your teacher.")
 
-            # ── Special characters — pure Streamlit buttons ──
+            # ── Special characters ──
             if not is_locked:
                 st.markdown("**Toca para insertar · Tap to insert:**")
                 all_chars = ["á","é","í","ó","ú","ü","ñ","¿","¡","Á","É","Í","Ó","Ú","Ü","Ñ"]
@@ -1100,7 +1133,6 @@ elif st.session_state.screen == "writing":
 
             # ── Text area ──
             init_val = st.session_state.get(f"textarea_{key_resp}", saved.get("text",""))
-            # Render textarea — spellcheck disabled via JS above
             response_text = st.text_area(
                 f"✍️ Escribe aquí (meta: {target})",
                 value=init_val,
@@ -1110,7 +1142,6 @@ elif st.session_state.screen == "writing":
                 placeholder="Escribe tu respuesta aquí...",
                 help="No hay autocorrección. Usa los botones de arriba para ñ y acentos."
             )
-            # Inject spellcheck=false directly onto this specific textarea
             st.markdown("""
 <script>
 (function() {
@@ -1138,7 +1169,6 @@ elif st.session_state.screen == "writing":
                 if doc_url:
                     st.markdown(f"📄 [Open your Google Doc]({doc_url})")
 
-                # Show AI feedback if it was saved
                 ai_fb  = saved.get("ai_feedback")
                 ai_err = saved.get("ai_error")
                 if ai_fb:
@@ -1159,7 +1189,6 @@ elif st.session_state.screen == "writing":
                     ai_feedback = None
                     ai_attempted = False
 
-                    # Step 1 — Get AI feedback
                     with st.spinner("🤖 Generando retroalimentación de IA..."):
                         ai_feedback, ai_error = get_ai_feedback(
                             st.session_state.student_name,
@@ -1168,12 +1197,13 @@ elif st.session_state.screen == "writing":
                         )
                         ai_attempted = True
 
-                    # Step 2 — Create Google Doc (includes feedback)
                     with st.spinner("📄 Saving to Google Drive..."):
                         drive, docs_svc = get_drive_service()
                         doc_url = None
                         if drive and docs_svc:
-                            folder_id = get_or_create_folder(drive, FOLDER_NAME)
+                            root_id = get_or_create_folder(drive, FOLDER_NAME)
+                            teacher_label = st.session_state.get("selected_teacher", "General")
+                            folder_id = get_or_create_subfolder(drive, root_id, teacher_label) if root_id else None
                             if folder_id:
                                 doc_url, _ = create_student_doc(
                                     drive, docs_svc, folder_id,
@@ -1182,7 +1212,6 @@ elif st.session_state.screen == "writing":
                                     response_text, ai_feedback
                                 )
 
-                    # Step 3 — Save to session
                     st.session_state.writing_responses[key_resp] = {
                         "text":                response_text,
                         "submitted":           True,
